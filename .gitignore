@@ -1,0 +1,49 @@
+.DS_Store
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+
+# Local datasets and generated reports
+data/*
+!data/.gitkeep
+!data/README.md
+
+# Local model artifacts
+trained_models/*
+!trained_models/.gitkeep
+!trained_models/README.md
+
+# Common ML artifacts
+*.safetensors
+*.bin
+*.joblib
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Experiment trackers and runtime outputs
+wandb/
+mlruns/
+runs/
+
+# Local Docker/OS noise
+.docker/

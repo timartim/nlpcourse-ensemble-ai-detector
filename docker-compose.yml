@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    environment:
+      DETECTOR_TYPE: ensemble
+      MODEL_PATH: trained_models/ensemble_models_2_3000/manifest.json
+      THRESHOLD: "0.5"
+      MAX_LENGTH: "256"
+      BATCH_SIZE: "32"
+      DEVICE: cpu
+    volumes:
+      - ./trained_models:/app/trained_models:ro
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    environment:
+      API_URL: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "8501:8501"
+
