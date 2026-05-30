@@ -10,27 +10,54 @@ from typing import Any, Protocol
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 from .detector import BertAIDetector
 
 
-_SENT_SPLIT_RE = re.compile(r"(?<=[.!?…])(?=\s+[\"'«(А-ЯA-Z0-9])")
+EDIT_OPEN = "<EDIT>"
+EDIT_CLOSE = "</EDIT>"
+_TAG_BLOCK_RE = re.compile(r"<EDIT>(.*?)</EDIT>", re.DOTALL)
+_SENT_SEG_RE = re.compile(r".*?(?:[.!?…]+(?:\s+|$)|$)", re.DOTALL)
+
+SYSTEM_TAG_EDITOR = (
+    "Ты — опытный редактор русских текстов. "
+    "Тебе пришёл фрагмент, где часть помечена тегами <EDIT>...</EDIT>. "
+    "Отредактируй ТОЛЬКО текст внутри <EDIT>...</EDIT>, "
+    "не добавляй фактов, сохрани смысл. "
+    "Текст ВНЕ тегов НЕ МЕНЯЙ (символ в символ). "
+    "Верни весь фрагмент целиком, СОХРАНИВ теги <EDIT>...</EDIT>. "
+    "Текст внутри тегов должен быть ПЕРЕФРАЗИРОВАН (не допускается идентичный вариант)."
+)
+
+USER_TAG_REWRITE_TEMPLATE = """Отредактируй ТОЛЬКО то, что внутри <EDIT>...</EDIT>.
+Требования к правке внутри тегов:
+- полностью перефразируй (другие слова и конструкции), сохрани смысл и стиль
+- не добавляй новых фактов
+- избегай дословного совпадения с исходником
+
+ОГРАНИЧЕНИЯ:
+- текст ВНЕ тегов <EDIT>...</EDIT> НЕ МЕНЯЙ (символ в символ)
+- верни ВЕСЬ фрагмент целиком
+- теги <EDIT> и </EDIT> ОБЯЗАТЕЛЬНО должны остаться в ответе
+
+ФРАГМЕНТ:
+{fragment}
+"""
 
 
 @dataclass(frozen=True)
 class ObfuscatorConfig:
-    window_size: int = 4
-    stride: int = 1
-    anchor: str = "center"
-    aggregation: str = "max"
-    rewrite_threshold: float = 0.8
-    sleep_between_calls: float = 0.0
-    rewrite_prompt_template: str = (
-        "Перепиши фрагмент по-русски для ясности и естественного стиля. "
-        "Сохрани смысл и факты, не добавляй новых утверждений. "
-        "Не используй канцелярит. Текст должен быть кратким и понятным.\n\n"
-        "Фрагмент:\n{fragment}"
-    )
+    sent_threshold: float = 0.8
+    sent_max_retries: int = 3
+    neighbors: int = 1
+    detector_batch_size: int = 128
+    rewrite_sleep: float = 0.0
+    show_progress: bool = True
+
+    @property
+    def rewrite_threshold(self) -> float:
+        return self.sent_threshold
 
 
 @dataclass(frozen=True)
@@ -39,7 +66,9 @@ class ObfuscationLogItem:
     score: float
     old: str
     new: str
-    detector_scores: dict[str, float]
+    p_ai_after: float
+    retries: int
+    history: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -50,24 +79,16 @@ class ObfuscationResult:
     rewrites: list[ObfuscationLogItem]
     sentence_scores: list[float]
     threshold: float
-
-
-@dataclass(frozen=True)
-class Window:
-    sentence_ids: list[int]
-    text: str
-    anchor_id: int
+    flagged_sentence_ids: list[int]
 
 
 class ProbabilityDetector(Protocol):
-    name: str
-
     def predict_proba_ai(self, texts: list[str], *, batch_size: int | None = None) -> np.ndarray:
         ...
 
 
 class RewriteClient:
-    """Base rewrite client with optional JSON cache."""
+    """Tagged-fragment rewrite client with optional JSON cache."""
 
     def __init__(self, *, cache_path: str | None = None) -> None:
         self.cache_path = Path(cache_path) if cache_path else None
@@ -78,17 +99,22 @@ class RewriteClient:
             except Exception:
                 self.cache = {}
 
-    def rewrite(self, text: str, *, prompt: str) -> str:
-        key = self._key(text)
+    def rewrite_tagged_fragment(self, fragment_with_tags: str) -> str:
+        key = self._key(fragment_with_tags)
         if key in self.cache:
             return self.cache[key]
 
-        rewritten = self._rewrite_uncached(text, prompt=prompt)
+        rewritten = self._rewrite_tagged_fragment_uncached(fragment_with_tags)
         self.cache[key] = rewritten
         self._save_cache()
         return rewritten
 
-    def _rewrite_uncached(self, text: str, *, prompt: str) -> str:
+    def rewrite(self, text: str, *, prompt: str | None = None) -> str:
+        tagged = f"{EDIT_OPEN}{text}{EDIT_CLOSE}"
+        edited = extract_edited_from_tagged(self.rewrite_tagged_fragment(tagged))
+        return edited or text
+
+    def _rewrite_tagged_fragment_uncached(self, fragment_with_tags: str) -> str:
         raise NotImplementedError
 
     def _key(self, text: str) -> str:
@@ -102,6 +128,7 @@ class RewriteClient:
 
 
 class SimpleRewriteClient(RewriteClient):
+    """Local tagged rewriter for smoke tests when an LLM client is not provided."""
 
     _REPLACEMENTS: tuple[tuple[str, str], ...] = (
         ("Данная", "Эта"),
@@ -123,34 +150,145 @@ class SimpleRewriteClient(RewriteClient):
         ("имеет возможность", "может"),
     )
 
-    def _rewrite_uncached(self, text: str, *, prompt: str) -> str:
-        rewritten = text.strip()
+    def _rewrite_tagged_fragment_uncached(self, fragment_with_tags: str) -> str:
+        edited = extract_edited_from_tagged(fragment_with_tags)
+        if edited is None:
+            return fragment_with_tags
+
+        rewritten = clean_text(edited)
         for old, new in self._REPLACEMENTS:
             rewritten = re.sub(rf"\b{re.escape(old)}\b", new, rewritten)
-        rewritten = re.sub(r"\s+", " ", rewritten).strip()
-        return rewritten or text
+        rewritten = re.sub(r"\s+", " ", rewritten).strip() or edited
+        return replace_edited_in_tagged(fragment_with_tags, rewritten)
 
 
-class BertAIObfuscator:
-    """Scores text by sentence windows and rewrites sentences that look AI-generated."""
+class OpenAICompatibleRewriteClient(RewriteClient):
+    """Rewrite client that uses the notebook prompts with OpenAI-compatible APIs."""
 
     def __init__(
         self,
-        detector: ProbabilityDetector | BertAIDetector | list[ProbabilityDetector | BertAIDetector],
+        *,
+        openai_api_key: str | None = None,
+        deepseek_api_key: str | None = None,
+        openai_model: str = "gpt-5-mini",
+        deepseek_model: str = "deepseek-chat",
+        temperature: float = 0.2,
+        max_output_tokens: int = 2000,
+        cache_path: str | None = None,
+    ) -> None:
+        super().__init__(cache_path=cache_path)
+        self.openai_api_key = openai_api_key
+        self.deepseek_api_key = deepseek_api_key
+        self.openai_model = openai_model
+        self.deepseek_model = deepseek_model
+        self.temperature = temperature
+        self.max_output_tokens = max_output_tokens
+
+    def _rewrite_tagged_fragment_uncached(self, fragment_with_tags: str) -> str:
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("Install openai to use OpenAICompatibleRewriteClient.") from exc
+
+        fragment = clean_text(fragment_with_tags)
+        if not fragment:
+            return ""
+
+        if self.openai_api_key:
+            client = OpenAI(api_key=self.openai_api_key)
+            response = client.responses.create(
+                model=self.openai_model,
+                input=[
+                    {"role": "system", "content": [{"type": "input_text", "text": SYSTEM_TAG_EDITOR}]},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": USER_TAG_REWRITE_TEMPLATE.format(fragment=fragment),
+                            }
+                        ],
+                    },
+                ],
+                max_output_tokens=self.max_output_tokens,
+            )
+            output = clean_text(extract_text_from_responses_api(response))
+            if output and EDIT_OPEN in output and EDIT_CLOSE in output:
+                return output
+
+        if self.deepseek_api_key:
+            client = OpenAI(api_key=self.deepseek_api_key, base_url="https://api.deepseek.com/v1")
+            response = client.chat.completions.create(
+                model=self.deepseek_model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_TAG_EDITOR},
+                    {"role": "user", "content": USER_TAG_REWRITE_TEMPLATE.format(fragment=fragment)},
+                ],
+                temperature=self.temperature,
+                max_tokens=self.max_output_tokens,
+            )
+            output = clean_text(response.choices[0].message.content or "")
+            if output and EDIT_OPEN in output and EDIT_CLOSE in output:
+                return output
+
+        return ""
+
+
+class ModelAdapter:
+    def __init__(self, model: Any) -> None:
+        self.model = model
+
+    def predict_proba_ai_batched(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int = 64,
+        desc: str = "detector inference",
+        show_progress: bool = True,
+    ) -> np.ndarray:
+        texts = ["" if text is None else str(text) for text in texts]
+        out: list[np.ndarray] = []
+        iterator = range(0, len(texts), batch_size)
+        for start in tqdm(iterator, desc=desc, dynamic_ncols=True, disable=not show_progress):
+            batch = texts[start : start + batch_size]
+            out.append(self._call_model(batch, batch_size=min(batch_size, len(batch))))
+        return np.concatenate(out, axis=0) if out else np.zeros((0,), dtype=np.float32)
+
+    def _call_model(self, texts: list[str], *, batch_size: int) -> np.ndarray:
+        if hasattr(self.model, "predict_proba_ai") and callable(getattr(self.model, "predict_proba_ai")):
+            try:
+                return np.asarray(self.model.predict_proba_ai(texts, batch_size=batch_size), dtype=np.float32)
+            except TypeError:
+                return np.asarray(self.model.predict_proba_ai(texts), dtype=np.float32)
+        if hasattr(self.model, "predict_proba_or") and callable(getattr(self.model, "predict_proba_or")):
+            return np.asarray(self.model.predict_proba_or(texts, batch_size=batch_size), dtype=np.float32)
+        raise TypeError("model must implement predict_proba_ai(...) or predict_proba_or(...)")
+
+
+class BertAIObfuscator:
+    """Detector-guided iterative sentence obfuscator from the train_bert notebook pipeline."""
+
+    def __init__(
+        self,
+        detector: ProbabilityDetector | BertAIDetector,
         config: ObfuscatorConfig | None = None,
         rewrite_client: RewriteClient | None = None,
     ) -> None:
-        self.detectors = detector if isinstance(detector, list) else [detector]
-        if not self.detectors:
-            raise ValueError("At least one detector is required.")
+        self.detector = detector
+        self.adapter = ModelAdapter(detector)
         self.config = config or ObfuscatorConfig()
         self.rewrite_client = rewrite_client or SimpleRewriteClient()
 
     def obfuscate(self, text: str) -> ObfuscationResult:
-        return self.obfuscate_batch([text])[0]
+        return self._obfuscate_one(str(text))
 
     def obfuscate_batch(self, texts: list[str]) -> list[ObfuscationResult]:
-        return [self._obfuscate_one(str(text)) for text in texts]
+        return [
+            self._obfuscate_one(str(text), row_index=index)
+            for index, text in enumerate(
+                tqdm(texts, desc="rewrite-by-sent-detector", disable=not self.config.show_progress)
+            )
+        ]
 
     def process_dataframe(
         self,
@@ -159,106 +297,91 @@ class BertAIObfuscator:
         text_col: str,
         out_col: str = "text_rewritten",
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        df_out = df.copy()
-        logs: list[dict[str, Any]] = []
-        rewritten_texts: list[str] = []
+        if text_col not in df.columns:
+            raise ValueError(f"Missing text_col={text_col!r}.")
 
-        for row_idx, row in df_out.iterrows():
-            result = self.obfuscate(str(row.get(text_col, "") or ""))
+        df_out = df.copy()
+        rewritten_texts: list[str] = []
+        logs: list[dict[str, Any]] = []
+
+        iterator = df_out.iterrows()
+        for row_idx, row in tqdm(iterator, total=len(df_out), desc="rewrite dataframe", disable=not self.config.show_progress):
+            result = self._obfuscate_one(str(row.get(text_col, "") or ""), row_index=int(row_idx))
             rewritten_texts.append(result.obfuscated_text)
             for item in result.rewrites:
                 logs.append(
                     {
                         "row_idx": int(row_idx),
                         "sent_id": item.sentence_id,
-                        "score_combined": item.score,
                         "old": item.old,
                         "new": item.new,
-                        "detector_scores": item.detector_scores,
+                        "p_ai_before_sent": item.score,
+                        "p_ai_after_sent": item.p_ai_after,
+                        "retries": item.retries,
+                        "history": json.dumps(item.history, ensure_ascii=False),
                     }
                 )
 
         df_out[out_col] = rewritten_texts
         return df_out, pd.DataFrame(logs)
 
-    def _obfuscate_one(self, text: str) -> ObfuscationResult:
-        if not text.strip():
+    def _obfuscate_one(self, text: str, *, row_index: int | None = None) -> ObfuscationResult:
+        parts = split_sentences_keep_ws(text)
+        if not parts:
             return self._empty_result(text)
 
-        sentence_spans = split_sentences_with_offsets(text)
-        sentences = [sentence for sentence, _, _ in sentence_spans]
-        if not sentences:
-            return self._empty_result(text)
-
-        windows = make_windows(
-            sentences,
-            window_size=self.config.window_size,
-            stride=self.config.stride,
-            anchor=self.config.anchor,
+        cores = [core for core, _ in parts]
+        p_sent = score_sentences_p_ai(
+            self.adapter,
+            cores,
+            batch_size=self.config.detector_batch_size,
+            desc="sent detector (select)" if row_index is None else f"sent detector row={row_index}",
+            show_progress=False,
         )
-        if not windows:
-            return self._empty_result(text)
-
-        sent_scores_by_detector = self._score_sentences(windows, len(sentences))
-        combined_scores = np.zeros(len(sentences), dtype=np.float32)
-        for scores in sent_scores_by_detector.values():
-            combined_scores = np.maximum(combined_scores, scores)
-
-        new_sentences = list(sentences)
+        flagged = [i for i, probability in enumerate(p_sent.tolist()) if probability >= self.config.sent_threshold]
+        clean_cores = list(cores)
         rewrites: list[ObfuscationLogItem] = []
-        for sentence_id, score in enumerate(combined_scores.tolist()):
-            if score < self.config.rewrite_threshold:
-                continue
 
-            old = sentences[sentence_id].strip()
-            if not old:
-                continue
-
-            prompt = self.config.rewrite_prompt_template.format(fragment=old)
-            new = self.rewrite_client.rewrite(old, prompt=prompt).strip()
-            if new and new != old:
-                new_sentences[sentence_id] = new
+        for sent_id in flagged:
+            result = iterative_rewrite_core_until_ok(
+                adapter=self.adapter,
+                rewrite_client=self.rewrite_client,
+                cores=clean_cores,
+                sent_id=sent_id,
+                neighbors=self.config.neighbors,
+                sent_threshold=self.config.sent_threshold,
+                sent_max_retries=self.config.sent_max_retries,
+                detector_batch_size=self.config.detector_batch_size,
+                show_progress=False,
+            )
+            if result["changed"]:
+                clean_cores[sent_id] = result["new"]
                 rewrites.append(
                     ObfuscationLogItem(
-                        sentence_id=sentence_id,
-                        score=float(score),
-                        old=old,
-                        new=new,
-                        detector_scores={
-                            name: float(scores[sentence_id])
-                            for name, scores in sent_scores_by_detector.items()
-                        },
+                        sentence_id=int(sent_id),
+                        score=float(result["p_ai_before"]),
+                        old=result["old"],
+                        new=result["new"],
+                        p_ai_after=float(result["p_ai_after"]),
+                        retries=int(result["retries"]),
+                        history=result["history"],
                     )
                 )
 
-            if self.config.sleep_between_calls > 0:
-                time.sleep(self.config.sleep_between_calls)
+            if self.config.rewrite_sleep > 0:
+                time.sleep(self.config.rewrite_sleep)
 
-        obfuscated_text = " ".join(sentence.strip() for sentence in new_sentences).strip()
+        clean_parts = [(clean_cores[i], whitespace) for i, (_core, whitespace) in enumerate(parts)]
+        obfuscated = join_sentences_keep_ws(clean_parts)
         return ObfuscationResult(
             original_text=text,
-            obfuscated_text=obfuscated_text,
-            changed=obfuscated_text != text,
+            obfuscated_text=obfuscated,
+            changed=obfuscated.strip() != text.strip(),
             rewrites=rewrites,
-            sentence_scores=[float(score) for score in combined_scores.tolist()],
-            threshold=self.config.rewrite_threshold,
+            sentence_scores=[float(value) for value in p_sent.tolist()],
+            threshold=float(self.config.sent_threshold),
+            flagged_sentence_ids=flagged,
         )
-
-    def _score_sentences(self, windows: list[Window], n_sentences: int) -> dict[str, np.ndarray]:
-        window_texts = [window.text for window in windows]
-        scores_by_detector: dict[str, np.ndarray] = {}
-        for index, detector in enumerate(self.detectors):
-            detector_name = getattr(detector, "name", detector.__class__.__name__) or f"detector_{index}"
-            p_ai_windows = detector.predict_proba_ai(window_texts, batch_size=None)
-            if len(p_ai_windows) != len(windows):
-                raise RuntimeError(f"Detector {detector_name}: wrong output size.")
-            scores_by_detector[detector_name] = score_sentences_from_windows(
-                windows,
-                p_ai_windows,
-                n_sentences,
-                aggregation=self.config.aggregation,
-            )
-        return scores_by_detector
 
     def _empty_result(self, text: str) -> ObfuscationResult:
         return ObfuscationResult(
@@ -267,80 +390,171 @@ class BertAIObfuscator:
             changed=False,
             rewrites=[],
             sentence_scores=[],
-            threshold=self.config.rewrite_threshold,
+            threshold=float(self.config.sent_threshold),
+            flagged_sentence_ids=[],
         )
 
 
-def split_sentences_with_offsets(text: str) -> list[tuple[str, int, int]]:
-    if not text:
-        return []
+def iterative_rewrite_core_until_ok(
+    *,
+    adapter: ModelAdapter,
+    rewrite_client: RewriteClient,
+    cores: list[str],
+    sent_id: int,
+    neighbors: int,
+    sent_threshold: float,
+    sent_max_retries: int,
+    detector_batch_size: int,
+    show_progress: bool,
+) -> dict[str, Any]:
+    old = cores[sent_id]
+    p0 = float(
+        score_sentences_p_ai(
+            adapter,
+            [old],
+            batch_size=detector_batch_size,
+            desc="sent detector (single)",
+            show_progress=show_progress,
+        )[0]
+    )
+    history: list[dict[str, Any]] = [{"try": 0, "p_ai": p0, "text": old}]
+    best_text = old
+    best_p = p0
 
-    spans: list[tuple[str, int, int]] = []
-    parts = _SENT_SPLIT_RE.split(text)
-    cursor = 0
-    for part in parts:
-        if not part:
+    if p0 < sent_threshold:
+        return _rewrite_result(False, sent_id, old, old, p0, p0, 0, history)
+
+    cur = old
+    attempts = 0
+    for attempt in range(1, int(sent_max_retries) + 1):
+        attempts += 1
+        tmp = list(cores)
+        tmp[sent_id] = cur
+        block = build_context_block(tmp, sent_id, neighbors=neighbors)
+
+        out_block = rewrite_client.rewrite_tagged_fragment(block)
+        edited = clean_text(extract_edited_from_tagged(out_block) or "")
+        if not edited:
+            history.append({"try": attempt, "p_ai": None, "text": cur, "note": "empty_or_broken_llm_output"})
             continue
-        start = text.find(part, cursor)
-        if start < 0:
+        if edited.strip() == cur.strip():
+            history.append({"try": attempt, "p_ai": None, "text": cur, "note": "no_change"})
             continue
-        end = start + len(part)
-        cursor = end
-        spans.append((text[start:end], start, end))
-    return spans
+
+        p_new = float(
+            score_sentences_p_ai(
+                adapter,
+                [edited],
+                batch_size=detector_batch_size,
+                desc="sent detector (single)",
+                show_progress=show_progress,
+            )[0]
+        )
+        history.append({"try": attempt, "p_ai": p_new, "text": edited})
+        if p_new < best_p:
+            best_p = p_new
+            best_text = edited
+
+        cur = edited
+        if p_new < sent_threshold:
+            break
+
+    return _rewrite_result(best_text.strip() != old.strip(), sent_id, old, best_text, p0, best_p, attempts, history)
 
 
-def make_windows(
+def _rewrite_result(
+    changed: bool,
+    sent_id: int,
+    old: str,
+    new: str,
+    p_ai_before: float,
+    p_ai_after: float,
+    retries: int,
+    history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "changed": bool(changed),
+        "sent_id": int(sent_id),
+        "old": old,
+        "new": new,
+        "p_ai_before": float(p_ai_before),
+        "p_ai_after": float(p_ai_after),
+        "retries": int(retries),
+        "history": history,
+    }
+
+
+def score_sentences_p_ai(
+    adapter: ModelAdapter,
     sentences: list[str],
     *,
-    window_size: int = 4,
-    stride: int = 1,
-    anchor: str = "center",
-) -> list[Window]:
-    if not sentences:
-        return []
-
-    windows: list[Window] = []
-    if anchor not in {"first", "center", "last"}:
-        raise ValueError("anchor must be 'first', 'center' or 'last'.")
-
-    for anchor_id in range(0, len(sentences), stride):
-        if anchor == "first":
-            start = anchor_id
-        elif anchor == "last":
-            start = anchor_id - window_size + 1
-        else:
-            start = anchor_id - window_size // 2
-
-        start = max(0, min(start, max(len(sentences) - window_size, 0)))
-        end = min(start + window_size, len(sentences))
-        sentence_ids = list(range(start, end))
-
-        window_text = " ".join(sentences[index].strip() for index in sentence_ids).strip()
-        if window_text:
-            windows.append(Window(sentence_ids=sentence_ids, text=window_text, anchor_id=anchor_id))
-    return windows
-
-
-def score_sentences_from_windows(
-    windows: list[Window],
-    p_ai_windows: np.ndarray,
-    n_sentences: int,
-    *,
-    aggregation: str = "max",
+    batch_size: int = 128,
+    desc: str = "sent detector",
+    show_progress: bool = True,
 ) -> np.ndarray:
-    sent_scores: list[list[float]] = [[] for _ in range(n_sentences)]
-    for window, probability in zip(windows, p_ai_windows.tolist()):
-        sent_scores[window.anchor_id].append(float(probability))
+    if not sentences:
+        return np.zeros((0,), dtype=np.float32)
+    return adapter.predict_proba_ai_batched(sentences, batch_size=batch_size, desc=desc, show_progress=show_progress)
 
-    output = np.zeros(n_sentences, dtype=np.float32)
-    for index, scores in enumerate(sent_scores):
-        if not scores:
-            output[index] = 0.0
-        elif aggregation == "mean":
-            output[index] = float(np.mean(scores))
-        elif aggregation == "max":
-            output[index] = float(np.max(scores))
-        else:
-            raise ValueError("aggregation must be 'max' or 'mean'.")
+
+def split_sentences_keep_ws(text: str) -> list[tuple[str, str]]:
+    output: list[tuple[str, str]] = []
+    for match in _SENT_SEG_RE.finditer(str(text)):
+        segment = match.group(0)
+        if not segment or not segment.strip():
+            continue
+        core = segment.rstrip()
+        trailing_ws = segment[len(core) :]
+        output.append((core, trailing_ws))
     return output
+
+
+def join_sentences_keep_ws(parts: list[tuple[str, str]]) -> str:
+    return "".join(core + whitespace for core, whitespace in parts)
+
+
+def build_context_block(cores: list[str], sent_id: int, *, neighbors: int = 1) -> str:
+    left = max(0, sent_id - neighbors)
+    right = min(len(cores), sent_id + neighbors + 1)
+    chunk: list[str] = []
+    for index in range(left, right):
+        if index == sent_id:
+            chunk.append(f"{EDIT_OPEN}{cores[index]}{EDIT_CLOSE}")
+        else:
+            chunk.append(cores[index])
+    return " ".join(item.strip() for item in chunk if item and item.strip()).strip()
+
+
+def extract_edited_from_tagged(fragment_with_tags: str) -> str | None:
+    if not fragment_with_tags:
+        return None
+    match = _TAG_BLOCK_RE.search(fragment_with_tags)
+    if not match:
+        return None
+    inner = clean_text(match.group(1) or "")
+    return inner or None
+
+
+def replace_edited_in_tagged(fragment_with_tags: str, new_text: str) -> str:
+    return _TAG_BLOCK_RE.sub(f"{EDIT_OPEN}{new_text}{EDIT_CLOSE}", fragment_with_tags, count=1)
+
+
+def extract_text_from_responses_api(response: Any) -> str:
+    output = getattr(response, "output_text", None)
+    if output:
+        return str(output).strip()
+
+    text = ""
+    try:
+        for item in getattr(response, "output", []) or []:
+            if getattr(item, "type", None) == "message":
+                for content in getattr(item, "content", []) or []:
+                    if getattr(content, "type", None) == "output_text":
+                        text += getattr(content, "text", "") or ""
+    except Exception:
+        pass
+    return text.strip()
+
+
+def clean_text(text: str) -> str:
+    return (text or "").replace("\x00", "").strip()

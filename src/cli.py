@@ -276,22 +276,21 @@ def add_model_args(parser: argparse.ArgumentParser) -> None:
 
 
 def add_obfuscator_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--rewrite-threshold", type=float, default=0.8)
-    parser.add_argument("--window-size", type=int, default=4)
-    parser.add_argument("--stride", type=int, default=1)
-    parser.add_argument("--anchor", choices=["first", "center", "last"], default="center")
-    parser.add_argument("--aggregation", choices=["max", "mean"], default="max")
-    parser.add_argument("--sleep-between-calls", type=float, default=0.0)
+    parser.add_argument("--sent-threshold", type=float, default=0.8)
+    parser.add_argument("--sent-max-retries", type=int, default=3)
+    parser.add_argument("--neighbors", type=int, default=1)
+    parser.add_argument("--rewrite-sleep", type=float, default=0.0)
+    parser.add_argument("--no-obfuscator-progress", action="store_true")
 
 
 def build_obfuscator_config(args: argparse.Namespace) -> ObfuscatorConfig:
     return ObfuscatorConfig(
-        window_size=args.window_size,
-        stride=args.stride,
-        anchor=args.anchor,
-        aggregation=args.aggregation,
-        rewrite_threshold=args.rewrite_threshold,
-        sleep_between_calls=args.sleep_between_calls,
+        sent_threshold=args.sent_threshold,
+        sent_max_retries=args.sent_max_retries,
+        neighbors=args.neighbors,
+        detector_batch_size=args.batch_size,
+        rewrite_sleep=args.rewrite_sleep,
+        show_progress=not args.no_obfuscator_progress,
     )
 
 

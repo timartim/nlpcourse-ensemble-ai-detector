@@ -4,6 +4,7 @@ from .obfuscator import (
     ObfuscationLogItem,
     ObfuscationResult,
     ObfuscatorConfig,
+    OpenAICompatibleRewriteClient,
     RewriteClient,
     SimpleRewriteClient,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "ObfuscationLogItem",
     "ObfuscationResult",
     "ObfuscatorConfig",
+    "OpenAICompatibleRewriteClient",
     "RewriteClient",
     "SimpleRewriteClient",
 ]

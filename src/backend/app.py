@@ -29,11 +29,9 @@ class ScoreResponse(BaseModel):
 
 
 class ObfuscateRequest(ScoreRequest):
-    rewrite_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
-    window_size: int | None = Field(default=None, ge=1)
-    stride: int | None = Field(default=None, ge=1)
-    anchor: Literal["first", "center", "last"] | None = None
-    aggregation: Literal["max", "mean"] | None = None
+    sent_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    sent_max_retries: int | None = Field(default=None, ge=0)
+    neighbors: int | None = Field(default=None, ge=0)
 
 
 class ObfuscateResponse(BaseModel):
@@ -70,11 +68,11 @@ def request_config(request: ScoreRequest) -> DetectorConfig:
 
 def obfuscator_config(request: ObfuscateRequest) -> ObfuscatorConfig:
     return ObfuscatorConfig(
-        rewrite_threshold=0.8 if request.rewrite_threshold is None else request.rewrite_threshold,
-        window_size=4 if request.window_size is None else request.window_size,
-        stride=1 if request.stride is None else request.stride,
-        anchor=request.anchor or "center",
-        aggregation=request.aggregation or "max",
+        sent_threshold=0.8 if request.sent_threshold is None else request.sent_threshold,
+        sent_max_retries=3 if request.sent_max_retries is None else request.sent_max_retries,
+        neighbors=1 if request.neighbors is None else request.neighbors,
+        detector_batch_size=request.batch_size or 32,
+        show_progress=False,
     )
 
 

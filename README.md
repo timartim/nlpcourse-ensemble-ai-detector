@@ -30,6 +30,19 @@ Service for scoring Russian texts with a BERT-based AI-text detector.
 └── requirements-frontend.txt
 ```
 
+## Project Navigation
+
+Key implementation files:
+
+- Ensemble detector class: `src/data_models/ensemble_ai_model.py`
+- Shared detector wrapper used by CLI/API/UI: `src/model_service/detector.py`
+- Dataset collection scripts:
+  - human text collection: `src/scripts/dataset_collector/human_dataset_collector.py`
+  - AI text generation: `src/scripts/dataset_collector/ai_dataset_collector.py`
+  - dataset merge utilities: `src/scripts/dataset_collector/combine_data.py` and `src/scripts/dataset_collector/comine_labeled_and_initial_data.py`
+- Evaluation scripts: `src/scripts/evalute_models/compare_detectors.py` and `src/scripts/evalute_models/evaluate_llmtrace.py`
+- Obfuscator research pipeline: implemented in `src/notebooks/train_bert.ipynb`; the reusable service class lives in `src/model_service/obfuscator.py`
+
 ## Run With Docker
 
 ```bash
@@ -125,7 +138,7 @@ PYTHONPATH=src python -m cli train \
 Compare the project detector with a pretrained Russian HuggingFace detector:
 
 ```bash
-PYTHONPATH=src python src/scripts/compare_detectors.py \
+PYTHONPATH=src python src/scripts/evalute_models/compare_detectors.py \
   --dataset data/train_data/combined_human_labeled.csv \
   --generated-text-col generatedText \
   --generator-col llmUsed \

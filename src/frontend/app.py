@@ -78,7 +78,9 @@ with obfuscate_tab:
         payload = {
             "texts": [obfuscation_text],
             **model_payload(),
-            "rewrite_threshold": obfuscation_threshold,
+            "sent_threshold": obfuscation_threshold,
+            "sent_max_retries": 3,
+            "neighbors": 1,
         }
 
         try:
