@@ -1,0 +1,225 @@
+{
+  "n_samples": 20,
+  "text_col": "text",
+  "label_col": "label",
+  "detectors": [
+    {
+      "name": "ours",
+      "model_path": "trained_models/ensemble_models_2_3000/manifest.json",
+      "probability_ai": null,
+      "labels": null
+    },
+    {
+      "name": "gigacheck_classifier_multi",
+      "model_path": "iitolstykh/GigaCheck-Classifier-Multi",
+      "probability_ai": null,
+      "labels": null
+    }
+  ],
+  "metrics": {
+    "ours": {
+      "mean_probability_ai": 0.5524548292160034,
+      "median_probability_ai": 0.64504075050354,
+      "ai_share": 0.5,
+      "accuracy": 0.65,
+      "precision_ai": 0.9,
+      "recall_ai": 0.6,
+      "f1_ai": 0.7200000000000001
+    },
+    "gigacheck_classifier_multi": {
+      "mean_probability_ai": 0.5723553895950317,
+      "median_probability_ai": 0.9999816417694092,
+      "ai_share": 0.55,
+      "accuracy": 0.8,
+      "precision_ai": 1.0,
+      "recall_ai": 0.7333333333333333,
+      "f1_ai": 0.846153846153846
+    }
+  },
+  "comparison": {
+    "mean_probability_delta_own_minus_baseline": -0.019900625571608543,
+    "same_labels_share": 0.75,
+    "own_more_confident_ai_share": 0.6
+  },
+  "by_generator": {
+    "deepseek:deepseek-chat": {
+      "n_samples": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.5975029468536377,
+          "ai_share": 0.4,
+          "accuracy": 0.4,
+          "precision_ai": 1.0,
+          "recall_ai": 0.4,
+          "f1_ai": 0.5714285714285715
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 0.8054391741752625,
+          "ai_share": 0.8,
+          "accuracy": 0.8,
+          "precision_ai": 1.0,
+          "recall_ai": 0.8,
+          "f1_ai": 0.888888888888889
+        }
+      }
+    },
+    "deepseek:deepseek-reasoner": {
+      "n_samples": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.8211963772773743,
+          "ai_share": 0.8,
+          "accuracy": 0.8,
+          "precision_ai": 1.0,
+          "recall_ai": 0.8,
+          "f1_ai": 0.888888888888889
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 0.800011932849884,
+          "ai_share": 0.8,
+          "accuracy": 0.8,
+          "precision_ai": 1.0,
+          "recall_ai": 0.8,
+          "f1_ai": 0.888888888888889
+        }
+      }
+    },
+    "human": {
+      "n_samples": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.20715641975402832,
+          "ai_share": 0.2,
+          "accuracy": 0.8,
+          "precision_ai": 0.0,
+          "recall_ai": 0.0,
+          "f1_ai": 0.0
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 3.087217191932723e-05,
+          "ai_share": 0.0,
+          "accuracy": 1.0,
+          "precision_ai": 0.0,
+          "recall_ai": 0.0,
+          "f1_ai": 0.0
+        }
+      }
+    },
+    "openai:gpt-5": {
+      "n_samples": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.5839635729789734,
+          "ai_share": 0.6,
+          "accuracy": 0.6,
+          "precision_ai": 1.0,
+          "recall_ai": 0.6,
+          "f1_ai": 0.7499999999999999
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 0.6839396953582764,
+          "ai_share": 0.6,
+          "accuracy": 0.6,
+          "precision_ai": 1.0,
+          "recall_ai": 0.6,
+          "f1_ai": 0.7499999999999999
+        }
+      }
+    }
+  },
+  "binary_by_generator_vs_human": {
+    "deepseek:deepseek-chat": {
+      "n_samples": 10,
+      "n_ai": 5,
+      "n_human": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.402329683303833,
+          "ai_share": 0.3,
+          "accuracy": 0.6,
+          "precision_ai": 0.6666666666666666,
+          "recall_ai": 0.4,
+          "f1_ai": 0.5,
+          "tp": 2,
+          "tn": 4,
+          "fp": 1,
+          "fn": 3
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 0.4027350842952728,
+          "ai_share": 0.4,
+          "accuracy": 0.9,
+          "precision_ai": 1.0,
+          "recall_ai": 0.8,
+          "f1_ai": 0.888888888888889,
+          "tp": 4,
+          "tn": 5,
+          "fp": 0,
+          "fn": 1
+        }
+      }
+    },
+    "deepseek:deepseek-reasoner": {
+      "n_samples": 10,
+      "n_ai": 5,
+      "n_human": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.5141763687133789,
+          "ai_share": 0.5,
+          "accuracy": 0.8,
+          "precision_ai": 0.8,
+          "recall_ai": 0.8,
+          "f1_ai": 0.8000000000000002,
+          "tp": 4,
+          "tn": 4,
+          "fp": 1,
+          "fn": 1
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 0.40002140402793884,
+          "ai_share": 0.4,
+          "accuracy": 0.9,
+          "precision_ai": 1.0,
+          "recall_ai": 0.8,
+          "f1_ai": 0.888888888888889,
+          "tp": 4,
+          "tn": 5,
+          "fp": 0,
+          "fn": 1
+        }
+      }
+    },
+    "openai:gpt-5": {
+      "n_samples": 10,
+      "n_ai": 5,
+      "n_human": 5,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.39555996656417847,
+          "ai_share": 0.4,
+          "accuracy": 0.7,
+          "precision_ai": 0.75,
+          "recall_ai": 0.6,
+          "f1_ai": 0.6666666666666665,
+          "tp": 3,
+          "tn": 4,
+          "fp": 1,
+          "fn": 2
+        },
+        "gigacheck_classifier_multi": {
+          "mean_probability_ai": 0.341985285282135,
+          "ai_share": 0.3,
+          "accuracy": 0.8,
+          "precision_ai": 1.0,
+          "recall_ai": 0.6,
+          "f1_ai": 0.7499999999999999,
+          "tp": 3,
+          "tn": 5,
+          "fp": 0,
+          "fn": 2
+        }
+      }
+    }
+  }
+}

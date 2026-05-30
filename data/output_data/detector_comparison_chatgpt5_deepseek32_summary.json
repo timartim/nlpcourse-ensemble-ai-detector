@@ -1,0 +1,109 @@
+{
+  "n_samples": 11522,
+  "text_col": "text",
+  "label_col": "label",
+  "detectors": [
+    {
+      "name": "ours",
+      "model_path": "trained_models/ensemble_models_2_3000/manifest.json",
+      "probability_ai": null,
+      "labels": null
+    },
+    {
+      "name": "ruatd_ruroberta",
+      "model_path": "orzhan/ruroberta-ruatd-binary tokenizer=sberbank-ai/ruRoberta-large",
+      "probability_ai": null,
+      "labels": null
+    }
+  ],
+  "metrics": {
+    "ours": {
+      "mean_probability_ai": 0.676616907119751,
+      "median_probability_ai": 0.9657242298126221,
+      "ai_share": 0.6688942891859052,
+      "accuracy": 0.6688942891859052,
+      "precision_ai": 1.0,
+      "recall_ai": 0.6688942891859052,
+      "f1_ai": 0.8016017473607572
+    },
+    "ruatd_ruroberta": {
+      "mean_probability_ai": 0.6995981335639954,
+      "median_probability_ai": 0.9436758756637573,
+      "ai_share": 0.7152404096511022,
+      "accuracy": 0.7152404096511022,
+      "precision_ai": 1.0,
+      "recall_ai": 0.7152404096511022,
+      "f1_ai": 0.8339826949349796
+    }
+  },
+  "comparison": {
+    "mean_probability_delta_own_minus_baseline": -0.02298123575747013,
+    "same_labels_share": 0.5169241451136956,
+    "own_more_confident_ai_share": 0.5850546780072904
+  },
+  "by_generator": {
+    "deepseek:deepseek-chat": {
+      "n_samples": 3866,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.7828540205955505,
+          "ai_share": 0.7775478530781169,
+          "accuracy": 0.7775478530781169,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7775478530781169,
+          "f1_ai": 0.8748544819557625
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.7131453156471252,
+          "ai_share": 0.7284014485256078,
+          "accuracy": 0.7284014485256078,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7284014485256078,
+          "f1_ai": 0.8428614187369051
+        }
+      }
+    },
+    "deepseek:deepseek-reasoner": {
+      "n_samples": 3843,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.7506787776947021,
+          "ai_share": 0.7501951600312255,
+          "accuracy": 0.7501951600312255,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7501951600312255,
+          "f1_ai": 0.8572702943800178
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.6590992212295532,
+          "ai_share": 0.6726515742909186,
+          "accuracy": 0.6726515742909186,
+          "precision_ai": 1.0,
+          "recall_ai": 0.6726515742909186,
+          "f1_ai": 0.8042937149968887
+        }
+      }
+    },
+    "openai:gpt-5": {
+      "n_samples": 3813,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.49425849318504333,
+          "ai_share": 0.4767899291896145,
+          "accuracy": 0.4767899291896145,
+          "precision_ai": 1.0,
+          "recall_ai": 0.4767899291896145,
+          "f1_ai": 0.645711241342568
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.7266801595687866,
+          "ai_share": 0.7448203514293208,
+          "accuracy": 0.7448203514293208,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7448203514293208,
+          "f1_ai": 0.8537501878851647
+        }
+      }
+    }
+  }
+}

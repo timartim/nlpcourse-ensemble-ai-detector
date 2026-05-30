@@ -1,0 +1,225 @@
+{
+  "n_samples": 26922,
+  "text_col": "text",
+  "label_col": "label",
+  "detectors": [
+    {
+      "name": "ours",
+      "model_path": "trained_models/ensemble_models_2_3000/manifest.json",
+      "probability_ai": null,
+      "labels": null
+    },
+    {
+      "name": "ruatd_ruroberta",
+      "model_path": "orzhan/ruroberta-ruatd-binary tokenizer=sberbank-ai/ruRoberta-large",
+      "probability_ai": null,
+      "labels": null
+    }
+  ],
+  "metrics": {
+    "ours": {
+      "mean_probability_ai": 0.3601081967353821,
+      "median_probability_ai": 0.07394883036613464,
+      "ai_share": 0.3417650991753956,
+      "accuracy": 0.8028006834559097,
+      "precision_ai": 0.8376263449625041,
+      "recall_ai": 0.6688942891859052,
+      "f1_ai": 0.743811224243594
+    },
+    "ruatd_ruroberta": {
+      "mean_probability_ai": 0.8432171940803528,
+      "median_probability_ai": 0.9925189018249512,
+      "ai_share": 0.8550256295966124,
+      "accuracy": 0.32921031126959366,
+      "precision_ai": 0.35800860158999087,
+      "recall_ai": 0.7152404096511022,
+      "f1_ai": 0.4771720563967459
+    }
+  },
+  "comparison": {
+    "mean_probability_delta_own_minus_baseline": -0.4831089973449707,
+    "same_labels_share": 0.2922516900676027,
+    "own_more_confident_ai_share": 0.27167372409182083
+  },
+  "by_generator": {
+    "deepseek:deepseek-chat": {
+      "n_samples": 3866,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.7828540205955505,
+          "ai_share": 0.7775478530781169,
+          "accuracy": 0.7775478530781169,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7775478530781169,
+          "f1_ai": 0.8748544819557625
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.7131453156471252,
+          "ai_share": 0.7284014485256078,
+          "accuracy": 0.7284014485256078,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7284014485256078,
+          "f1_ai": 0.8428614187369051
+        }
+      }
+    },
+    "deepseek:deepseek-reasoner": {
+      "n_samples": 3843,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.7506787776947021,
+          "ai_share": 0.7501951600312255,
+          "accuracy": 0.7501951600312255,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7501951600312255,
+          "f1_ai": 0.8572702943800178
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.6590992212295532,
+          "ai_share": 0.6726515742909186,
+          "accuracy": 0.6726515742909186,
+          "precision_ai": 1.0,
+          "recall_ai": 0.6726515742909186,
+          "f1_ai": 0.8042937149968887
+        }
+      }
+    },
+    "human": {
+      "n_samples": 15400,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.1233021467924118,
+          "ai_share": 0.09701298701298701,
+          "accuracy": 0.902987012987013,
+          "precision_ai": 0.0,
+          "recall_ai": 0.0,
+          "f1_ai": 0.0
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.9506703615188599,
+          "ai_share": 0.9596103896103896,
+          "accuracy": 0.04038961038961039,
+          "precision_ai": 0.0,
+          "recall_ai": 0.0,
+          "f1_ai": 0.0
+        }
+      }
+    },
+    "openai:gpt-5": {
+      "n_samples": 3813,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.49425849318504333,
+          "ai_share": 0.4767899291896145,
+          "accuracy": 0.4767899291896145,
+          "precision_ai": 1.0,
+          "recall_ai": 0.4767899291896145,
+          "f1_ai": 0.645711241342568
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.7266801595687866,
+          "ai_share": 0.7448203514293208,
+          "accuracy": 0.7448203514293208,
+          "precision_ai": 1.0,
+          "recall_ai": 0.7448203514293208,
+          "f1_ai": 0.8537501878851647
+        }
+      }
+    }
+  },
+  "binary_by_generator_vs_human": {
+    "deepseek:deepseek-chat": {
+      "n_samples": 19266,
+      "n_ai": 3866,
+      "n_human": 15400,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.25565072894096375,
+          "ai_share": 0.23357209592027406,
+          "accuracy": 0.8778158413785944,
+          "precision_ai": 0.668,
+          "recall_ai": 0.7775478530781169,
+          "f1_ai": 0.7186229978484342,
+          "tp": 3006,
+          "tn": 13906,
+          "fp": 1494,
+          "fn": 860
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.9030075669288635,
+          "ai_share": 0.9132149901380671,
+          "accuracy": 0.17844908128308937,
+          "precision_ai": 0.16005456405592816,
+          "recall_ai": 0.7284014485256078,
+          "f1_ai": 0.2624417520969245,
+          "tp": 2816,
+          "tn": 622,
+          "fp": 14778,
+          "fn": 1050
+        }
+      }
+    },
+    "deepseek:deepseek-reasoner": {
+      "n_samples": 19243,
+      "n_ai": 3843,
+      "n_human": 15400,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.24859490990638733,
+          "ai_share": 0.22745933586239153,
+          "accuracy": 0.8724731071038819,
+          "precision_ai": 0.658670322138451,
+          "recall_ai": 0.7501951600312255,
+          "f1_ai": 0.7014598540145984,
+          "tp": 2883,
+          "tn": 13906,
+          "fp": 1494,
+          "fn": 960
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.8924409747123718,
+          "ai_share": 0.9023021358416048,
+          "accuracy": 0.1666580055084966,
+          "precision_ai": 0.14887980187755573,
+          "recall_ai": 0.6726515742909186,
+          "f1_ai": 0.24379892483259455,
+          "tp": 2585,
+          "tn": 622,
+          "fp": 14778,
+          "fn": 1258
+        }
+      }
+    },
+    "openai:gpt-5": {
+      "n_samples": 19213,
+      "n_ai": 3813,
+      "n_human": 15400,
+      "metrics": {
+        "ours": {
+          "mean_probability_ai": 0.1969219148159027,
+          "ai_share": 0.1723832821527091,
+          "accuracy": 0.8184042054858689,
+          "precision_ai": 0.5489130434782609,
+          "recall_ai": 0.4767899291896145,
+          "f1_ai": 0.5103157894736842,
+          "tp": 1818,
+          "tn": 13906,
+          "fp": 1494,
+          "fn": 1995
+        },
+        "ruatd_ruroberta": {
+          "mean_probability_ai": 0.9062174558639526,
+          "ai_share": 0.9169832925623276,
+          "accuracy": 0.18019049601832093,
+          "precision_ai": 0.16119877398115565,
+          "recall_ai": 0.7448203514293208,
+          "f1_ai": 0.26503662918202603,
+          "tp": 2840,
+          "tn": 622,
+          "fp": 14778,
+          "fn": 973
+        }
+      }
+    }
+  }
+}
